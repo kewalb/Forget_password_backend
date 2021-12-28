@@ -3,7 +3,7 @@ const env = require("dotenv");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
 const { MongoClient, Collection } = require("mongodb");
 const router = express.Router();
 env.config();
@@ -16,13 +16,12 @@ const PASSWORD = process.env.PASSWORD;
 
 // connection to gmail using nodemailer
 const mailTransporter = nodemailer.createTransport({
-    host: "smtp.gmail.com", 
-    auth: {
-        user: USERNAME,
-        pass: PASSWORD
-    }
+  host: "smtp.gmail.com",
+  auth: {
+    user: USERNAME,
+    pass: PASSWORD,
+  },
 });
-  
 
 // making a connection with mongodb database.
 const client = new MongoClient(MONGO_URL);
@@ -113,39 +112,71 @@ router.post("/forgot-password", async (request, response) => {
       console.log(error);
     }
     const token = buffer.toString("hex");
-    (await db).collection("authUser")
+    (await db)
+      .collection("authUser")
       .findOne({ email: email })
       .then(async (user) => {
         if (!user) {
           return response.send({ message: "Invalid username" });
         }
-        (await db).collection("authUser")
+        (await db)
+          .collection("authUser")
           .updateOne(
             { email: email },
             { $set: { resetToken: token, expireToken: Date.now() + 3600000 } }
           )
           .then((result) => {
             let mailDetails = {
-                to: user.email,
+              to: user.email,
               from: "no-replay@insta.com",
               subject: "password reset",
               html: `
                 <p>You requested for password reset</p>
-                <h5>click in this <a href="EMAIL/reset/${token}">link</a> to reset password</h5>
+                <h5>click in this <a href="http://localhost:3000/reset-password-form/${token}">link</a> to reset password</h5>
                 `,
             };
-            mailTransporter.sendMail(mailDetails, function(error, data){
-                if(error){
-                    console.log(error)
-                }
-                else{
-                    console.log("Email sent successfully")
-                }
+            mailTransporter.sendMail(mailDetails, function (error, data) {
+              if (error) {
+                console.log(error);
+              } else {
+                console.log("Email sent successfully");
+              }
             });
-            response.send({"message": "Email Sent"})
+            response.send({ message: "Email Sent" });
           });
       });
   });
+});
+
+router.post("/new-password", async (request, response) => {
+  console.log(request.body)
+  const { password, token } = request.body;
+  (await db)
+    .collection("authUser")
+    .findOne({ resetToken: token, expireToken: { $gt: Date.now() } })
+    .then((user) => {
+      if (!user) {
+        response.send({ message: "Session expired please try again" });
+      }
+      bcrypt.hash(password, 12).then(async (hashedpassword) => {
+        (await db).collection("authUser").updateOne(
+          { resetToken: token, expireToken: { $gt: Date.now() } },
+          {
+            $set: {
+              password: hashedpassword,
+              resetToken: null,
+              expireToken: null,
+            },
+          }
+        )
+        .then(() => {
+          response.json({ "message": "password updated success" });
+        });
+      });
+    })
+    .catch((err) => {
+      console.log(err);
+    });
 });
 
 exports.userRouter = router;
