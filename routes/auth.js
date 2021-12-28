@@ -149,7 +149,6 @@ router.post("/forgot-password", async (request, response) => {
 });
 
 router.post("/new-password", async (request, response) => {
-  console.log(request.body)
   const { password, token } = request.body;
   (await db)
     .collection("authUser")

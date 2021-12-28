@@ -15,7 +15,7 @@ app.use("/user", userRouter)
 
 
 app.get("/", (request, response) => {
-    response.status(200).send({"message": "Welcome"})
+    response.status(200).send({message: "Welcome"})
 })
 
 app.listen(PORT, () => {
