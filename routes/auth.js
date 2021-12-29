@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
 const { MongoClient, Collection } = require("mongodb");
 const router = express.Router();
 env.config();
@@ -13,13 +14,37 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const MONGO_URL = process.env.MONGO_URL;
 const USERNAME = process.env.GMAILUSERNAME;
 const PASSWORD = process.env.PASSWORD;
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REFRESH_TOKEN = process.env.REFRESH_TOKEN
 
 // connection to gmail using nodemailer
+const OAuth2 = google.auth.OAuth2;
+
+const oauth2Client = new OAuth2(
+  CLIENT_ID, // ClientID
+  CLIENT_SECRET, // Client Secret
+  "https://developers.google.com/oauthplayground" // Redirect URL
+);
+
+oauth2Client.setCredentials({
+  refresh_token: REFRESH_TOKEN
+});
+const accessToken = oauth2Client.getAccessToken()
+
 const mailTransporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
+  service: "gmail",
   auth: {
+    type: "OAuth2",
     user: USERNAME,
-    pass: PASSWORD,
+    // pass: PASSWORD,
+    clientId: CLIENT_ID,
+    clientSecret: CLIENT_SECRET,
+    refreshToken: REFRESH_TOKEN, 
+    accessToken:accessToken,
+    tls: {
+      rejectUnauthorized: false
+    }
   },
 });
 
@@ -158,19 +183,21 @@ router.post("/new-password", async (request, response) => {
         response.send({ message: "Session expired please try again" });
       }
       bcrypt.hash(password, 12).then(async (hashedpassword) => {
-        (await db).collection("authUser").updateOne(
-          { resetToken: token, expireToken: { $gt: Date.now() } },
-          {
-            $set: {
-              password: hashedpassword,
-              resetToken: null,
-              expireToken: null,
-            },
-          }
-        )
-        .then(() => {
-          response.json({ "message": "password updated success" });
-        });
+        (await db)
+          .collection("authUser")
+          .updateOne(
+            { resetToken: token, expireToken: { $gt: Date.now() } },
+            {
+              $set: {
+                password: hashedpassword,
+                resetToken: null,
+                expireToken: null,
+              },
+            }
+          )
+          .then(() => {
+            response.json({ message: "password updated success" });
+          });
       });
     })
     .catch((err) => {
